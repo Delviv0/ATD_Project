@@ -173,23 +173,8 @@ for i = 1:height(subset_pre)
     xlim([0, t(end)]); grid on;
 end
 
-% Guardar cada dígito como imagem individual de alta qualidade
-for i = 1:height(subset_pre)
-    sig = subset_pre.SignalPreprocessed{i};
-    fs  = subset_pre.SampleRate(i);
-    t   = (0:numel(sig)-1) / fs;
 
-    fig = figure('Visible','off', 'Position',[100 100 900 400]);
-    plot(t, sig, 'Color',[0.85 0.33 0.10], 'LineWidth',0.8);
-    title(sprintf('Dígito %d ; Repetição %d', subset_pre.Digit(i), REP_EXAMPLE), ...
-          'FontSize',12, 'FontWeight','bold');
-    xlabel('Time [s]', 'FontSize',11);
-    ylabel('Amplitude', 'FontSize',11);
-    xlim([0, t(end)]); grid on;
-    saveas(fig, sprintf('digit%d.png', subset_pre.Digit(i)));
-    close(fig);
-end
-% 
+
 %% ================================================================
 %  PONTO 6 – Comparação Visual: Original vs Pré-processado
 %  Grelha com os 10 dígitos lado a lado
@@ -230,60 +215,137 @@ fprintf(['Observações:\n' ...
     '- Amplitude normalizada em [-1, 1]: elimina variações de ganho.\n' ...
     '- Duração uniforme: %d amostras (%.3f s) para todos os sinais.\n\n'], ...
     target_len, target_len / T.SampleRate(1));
+
+%% ================================================================
+%  PONTO 7 – Características Temporais (5 features por áudio)
+%
+%  T1 – Energia total
+%  T2 – Desvio padrão da amplitude
+%  T3 – Zero-Crossing Rate (ZCR)
+%  T4 – Energia no onset (primeiros 25%)
+%  T5 – Duração da fala (do onset ao último frame activo)
+% ================================================================
+fprintf('=== PONTO 7: Cálculo de features temporais ===\n');
+
+feat_energy_total = zeros(N_files, 1);
+feat_amp_std      = zeros(N_files, 1);
+feat_zcr          = zeros(N_files, 1);
+feat_energy_onset = zeros(N_files, 1);
+feat_duration     = zeros(N_files, 1);
+
+for i = 1:N_files
+    sig  = T.SignalPreprocessed{i};
+    n    = numel(sig);
+    q1   = floor(n / 4);
+    fs   = T.SampleRate(i);
+
+    feat_energy_total(i) = sum(sig .^ 2);
+    feat_amp_std(i)      = std(sig);
+    feat_zcr(i)          = sum(abs(diff(sign(sig)))) / (2 * n);
+    feat_energy_onset(i) = sum(sig(1:q1) .^ 2);   % energia nos primeiros 25% do sinal
+
+    % Duração: do primeiro ao último frame com energia acima do limiar
+    % Usa as mesmas janelas do pré-processamento (WINDOW_MS, ENERGY_THRESH)
+    feat_duration(i) = compute_duration(sig, fs, WINDOW_MS, ENERGY_THRESH);
+end
+
+T.FeatEnergyTotal = feat_energy_total;
+T.FeatAmpStd      = feat_amp_std;
+T.FeatZCR         = feat_zcr;
+T.FeatEnergyOnset = feat_energy_onset;
+T.FeatDuration    = feat_duration;
+fprintf('  Colunas adicionadas à tabela.\n\n');
+
+% Duração média por dígito
+fprintf('  Duração média por dígito:\n');
+for d = 0:9
+    idx_d = T.Digit == d;
+    fprintf('    Dígito %d: %.3f s\n', d, mean(T.FeatDuration(idx_d)));
+end
+fprintf('\n');
+
+% %% ================================================================
+% %  PONTO 8 – Seleção Gráfica das Características Temporais
+% ================================================================
+fprintf('=== PONTO 8: Seleção de Features Temporais ===\n');
+
+% Boxplots das 5 features para todos os dígitos
+figure('Name','Boxplots - Todas as Features Temporais', ...
+       'NumberTitle','off', 'Position',[50 50 1400 800]);
+sgtitle('Boxplots das Features Temporais por Dígito', 'FontSize',13, 'FontWeight','bold');
+
+subplot(2,3,1); boxplot(T.FeatEnergyTotal, T.Digit); title('Energia Total');     xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(2,3,2); boxplot(T.FeatAmpStd,      T.Digit); title('Desvio Padrão');     xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(2,3,3); boxplot(T.FeatZCR,         T.Digit); title('ZCR');               xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(2,3,4); boxplot(T.FeatEnergyOnset, T.Digit); title('Energia no Onset'); xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(2,3,5); boxplot(T.FeatDuration,    T.Digit); title('Duração (s)');       xlabel('Dígito'); ylabel('Valor'); grid on;
+
+% As 3 melhores features num gráfico separado
+figure('Name','Boxplots - Top 3 Features Temporais', ...
+       'NumberTitle','off', 'Position',[50 50 1200 500]);
+sgtitle('Top 3 Features Temporais para Discriminação de Dígitos', 'FontSize',13, 'FontWeight','bold');
+
+subplot(1,3,1); boxplot(T.FeatEnergyTotal, T.Digit); title('Energia Total');  xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(1,3,2); boxplot(T.FeatZCR,         T.Digit); title('ZCR');            xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(1,3,3); boxplot(T.FeatDuration,    T.Digit); title('Duração (s)');    xlabel('Dígito'); ylabel('Valor'); grid on;
+
+fprintf('  Features seleccionadas (top 3):\n');
+fprintf('  1. ZCR         – "six" tem ZCR muito alto (fricativa "s"); "one" e "nine" muito baixo.\n');
+fprintf('  2. Energia Total – "six" tem energia claramente mais baixa; "nine" e "zero" mais alta.\n');
+fprintf('  3. Duracao       – "one" e o mais curto; "nine", "zero" e "six" os mais longos.\n\n');
 % 
 % %% ================================================================
-% %  PONTO 7 – Características Temporais (7 features por áudio)
-% %
-% %  T1 – Energia total
-% %  T2 – Amplitude máxima absoluta
-% %  T3 – Desvio padrão da amplitude
-% %  T4 – Zero-Crossing Rate (ZCR)
-% %  T5 – Razão de energia: 1ª metade / 2ª metade
-% %  T6 – Energia no onset (primeiros 25%)
-% %  T7 – Root Mean Square (RMS)
+%  PONTO 9 – Série Complexa de Fourier (Espectro)
+% ================================================================
+fprintf('=== PONTO 9: Coeficientes da Série Complexa de Fourier ===\n');
+
+fft_coeffs = cell(N_files, 1);
+for i = 1:N_files
+    sig          = T.SignalPreprocessed{i};
+    N            = numel(sig);
+    fft_coeffs{i} = fft(sig) / N;   % c[k] = X[k]/N — coeficientes da série complexa de Fourier
+end
+T.FFT_Coeffs = fft_coeffs;
+fprintf('  Coeficientes guardados na tabela.\n\n');
+% 
+% %% ================================================================
+% %  PONTO 10 – Espectro de Amplitude Mediano e Quartis
 % % ================================================================
-% fprintf('=== PONTO 7: Cálculo de features temporais ===\n');
+% fprintf('=== PONTO 10: Espectro de Amplitude Mediano e Quartis ===\n');
 % 
-% feat_energy_total = zeros(N_files, 1);
-% feat_amp_max      = zeros(N_files, 1);
-% feat_amp_std      = zeros(N_files, 1);
-% feat_zcr          = zeros(N_files, 1);
-% feat_energy_ratio = zeros(N_files, 1);
-% feat_energy_onset = zeros(N_files, 1);
-% feat_rms          = zeros(N_files, 1);
+% N_fft     = target_len;
+% pos_freqs = 1:floor(N_fft/2);
+% fs_plot   = T.SampleRate(1);
+% freq_axis = (0:floor(N_fft/2)-1) * (fs_plot / N_fft);
 % 
-% for i = 1:N_files
-%     sig  = T.SignalPreprocessed{i};
-%     n    = numel(sig);
-%     half = floor(n / 2);
-%     q1   = floor(n / 4);
+% figure('Name','Espectro de Amplitude', 'Position',[50 50 1400 800]);
+% sgtitle('Espectro de Amplitude Mediano por Dígito', 'FontSize',14, 'FontWeight','bold');
 % 
-%     feat_energy_total(i)  = sum(sig .^ 2);
-%     feat_amp_max(i)       = max(abs(sig));
-%     feat_amp_std(i)       = std(sig);
-%     feat_zcr(i)           = sum(abs(diff(sign(sig)))) / (2 * n);
+% for d = 0:9
+%     idx_d = find(T.Digit == d);
+%     num_d = length(idx_d);
 % 
-%     e1 = sum(sig(1:half) .^ 2) + 1e-12;
-%     e2 = sum(sig(half+1:end) .^ 2) + 1e-12;
-%     feat_energy_ratio(i)  = e1 / e2;
+%     amp_matrix = zeros(num_d, length(pos_freqs));
+%     for k = 1:num_d
+%         % Normalizar módulo pelo número de amostras
+%         amp_full = abs(T.FFT_Coeffs{idx_d(k)}) / N_fft;
+%         amp_matrix(k, :) = amp_full(pos_freqs);
+%     end
 % 
-%     feat_energy_onset(i)  = sum(sig(1:q1) .^ 2);
-%     feat_rms(i)           = sqrt(mean(sig .^ 2));
+%     med_spec = quantile(amp_matrix, 0.50, 1);
+%     q25_spec = quantile(amp_matrix, 0.25, 1);
+%     q75_spec = quantile(amp_matrix, 0.75, 1);
+% 
+%     subplot(5, 2, d+1);
+%     plot(freq_axis, med_spec, 'b', 'LineWidth',1); hold on;
+%     plot(freq_axis, q25_spec, 'r--', 'LineWidth',0.5);
+%     plot(freq_axis, q75_spec, 'g--', 'LineWidth',0.5);
+%     title(sprintf('Dígito %d', d));
+%     xlim([0, 8000]);   % visualização focada até 8 kHz
+%     if d == 0, legend('Median','Q25','Q75'); end
+%     grid on;
 % end
-% 
-% T.FeatEnergyTotal = feat_energy_total;
-% T.FeatAmpMax      = feat_amp_max;
-% T.FeatAmpStd      = feat_amp_std;
-% T.FeatZCR         = feat_zcr;
-% T.FeatEnergyRatio = feat_energy_ratio;
-% T.FeatEnergyOnset = feat_energy_onset;
-% T.FeatRMS         = feat_rms;
-% 
-% fprintf('  Features temporais calculadas para %d áudios.\n', N_files);
-% fprintf('  Colunas adicionadas: FeatEnergyTotal, FeatAmpMax, FeatAmpStd,\n');
-% fprintf('                       FeatZCR, FeatEnergyRatio, FeatEnergyOnset, FeatRMS\n\n');
-% fprintf('Pontos 1 a 7 concluídos.\n');
-% 
+
 %% ================================================================
 %  FUNÇÕES LOCAIS – OBRIGATORIAMENTE NO FINAL DO FICHEIRO
 % ================================================================
@@ -297,25 +359,32 @@ function sig_out = remove_silence(sig, fs, window_ms, thresh)
     win_samples = round(fs * window_ms / 1000);
     n_frames    = floor(numel(sig) / win_samples);
 
+    if n_frames == 0, sig_out = sig; return; end
+
     energies = zeros(n_frames, 1);
     for k = 1:n_frames
         frame       = sig((k-1)*win_samples+1 : k*win_samples);
         energies(k) = sum(frame .^ 2);
     end
 
-    max_e  = max(energies);
-    onset  = find(energies / max_e > thresh, 1, 'first');
+    max_e = max(energies);
+    if max_e == 0, sig_out = sig; return; end
+
+    onset = find(energies / max_e > thresh, 1, 'first');
+    if isempty(onset), sig_out = sig; return; end
+
     sig_out = sig((onset-1)*win_samples+1 : end);
 end
-% 
-% 
+
+
 function sig_out = norm_amplitude(sig)
 % Normaliza o sinal para [-1, 1] dividindo pelo máximo absoluto.
-    mv      = max(abs(sig));
+    mv = max(abs(sig));
+    if mv == 0, sig_out = sig; return; end
     sig_out = sig / mv;
 end
-% 
-% 
+
+
 function sig_out = pad_trim(sig, target_len)
 % Se o sinal for maior que target_len, corta. Se for menor, adiciona zeros no final.
     if numel(sig) >= target_len
@@ -323,4 +392,33 @@ function sig_out = pad_trim(sig, target_len)
     else
         sig_out = [sig; zeros(target_len - numel(sig), 1)];
     end
+end
+
+
+function dur = compute_duration(sig, fs, window_ms, thresh)
+% Calcula a duração da fala em segundos: do primeiro ao último frame activo.
+% Um frame é "activo" se a sua energia normalizada ultrapassa thresh.
+% Isto remove tanto o silêncio inicial como o silêncio final.
+    win_samples = round(fs * window_ms / 1000);
+    n_frames    = floor(numel(sig) / win_samples);
+
+    if n_frames == 0, dur = 0; return; end
+
+    energies = zeros(n_frames, 1);
+    for k = 1:n_frames
+        frame       = sig((k-1)*win_samples+1 : k*win_samples);
+        energies(k) = sum(frame .^ 2);
+    end
+
+    max_e = max(energies);
+    if max_e == 0, dur = 0; return; end
+
+    active = energies / max_e > thresh;
+    first  = find(active, 1, 'first');
+    last   = find(active, 1, 'last');
+
+    if isempty(first), dur = 0; return; end
+
+    % Duração em segundos entre o início do primeiro e o fim do último frame activo
+    dur = (last - first + 1) * win_samples / fs;
 end
