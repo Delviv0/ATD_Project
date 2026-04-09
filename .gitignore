@@ -1,3 +1,4 @@
 data/
 *.mat
 *.wav
+.DS_Store

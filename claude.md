@@ -123,8 +123,8 @@ end
 
 % O sinal é dividido em janelas de WINDOW_MS ms. Para cada janela calcula-se
 % a energia. Se a energia estiver abaixo de ENERGY_THRESH, considera-se silêncio.
-WINDOW_MS     = 10;      % tamanho de janela (ms)
-ENERGY_THRESH = 0.001;   % limiar (fracção da energia máxima)
+WINDOW_MS     = 1;       % tamanho de janela (ms)
+ENERGY_THRESH = 0.008;   % limiar (fracção da energia máxima)
 
 % Calcular duração alvo: percentil 95 das durações após remover silêncio
 trimmed_lens = zeros(N_files, 1);
@@ -171,6 +171,23 @@ for i = 1:height(subset_pre)
     xlabel('Time [s]', 'FontSize',8);
     ylabel('Amplitude', 'FontSize',8);
     xlim([0, t(end)]); grid on;
+end
+
+% Guardar cada dígito como imagem individual de alta qualidade
+for i = 1:height(subset_pre)
+    sig = subset_pre.SignalPreprocessed{i};
+    fs  = subset_pre.SampleRate(i);
+    t   = (0:numel(sig)-1) / fs;
+
+    fig = figure('Visible','off', 'Position',[100 100 900 400]);
+    plot(t, sig, 'Color',[0.85 0.33 0.10], 'LineWidth',0.8);
+    title(sprintf('Dígito %d ; Repetição %d', subset_pre.Digit(i), REP_EXAMPLE), ...
+          'FontSize',12, 'FontWeight','bold');
+    xlabel('Time [s]', 'FontSize',11);
+    ylabel('Amplitude', 'FontSize',11);
+    xlim([0, t(end)]); grid on;
+    saveas(fig, sprintf('digit%d.png', subset_pre.Digit(i)));
+    close(fig);
 end
 % 
 %% ================================================================
