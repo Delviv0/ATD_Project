@@ -12,9 +12,6 @@
 %  As funções locais estão no FINAL deste ficheiro (obrigatório MATLAB).
 % ================================================================
 
-% clear: apaga todas as variáveis do workspace
-% clc: limpa a Command Window
-% close all: fecha todas as figuras abertas
 clear; clc; close all;
 
 % Pasta do participante escolhido pelo grupo (alterar conforme necessário)
@@ -60,7 +57,7 @@ fprintf('Participante        : %d\n',   T.Participant(1));
 fprintf('Dígitos             : %s\n',   num2str(unique(T.Digit)'));
 fprintf('Repetições por díg. : %d\n\n', numel(unique(T.Repetition)));
 disp(head(T, 5));
-% 
+
 %% ================================================================
 %  PONTO 2 – Importação dos Sinais de Áudio
 % ================================================================
@@ -113,7 +110,7 @@ for i = 1:height(subset)
     ylabel('Amplitude', 'FontSize',8);
     xlim([0, t(end)]); grid on;
 end
-% 
+
 %% ================================================================
 %  PONTO 4 – Pré-processamento dos Sinais
 %   a) Remover silêncio inicial via energia por janelas
@@ -136,7 +133,6 @@ target_s   = prctile(trimmed_lens ./ T.SampleRate, 95);
 target_len = round(target_s * T.SampleRate(1));
 fprintf('Duração alvo (percentil 95): %.4f s  (%d amostras)\n', target_s, target_len);
 
-% Aplicar pré-processamento
 preprocessed = cell(N_files, 1);
 for i = 1:N_files
     sig = remove_silence(T.Signal{i}, T.SampleRate(i), WINDOW_MS, ENERGY_THRESH);
@@ -146,7 +142,7 @@ for i = 1:N_files
 end
 
 T.SignalPreprocessed = preprocessed;
-% 
+
 %% ================================================================
 %  PONTO 5 – Gráficos dos Sinais Pré-processados
 %  (repetição 5 — igual ao ponto 3)
@@ -264,8 +260,8 @@ for d = 0:9
 end
 fprintf('\n');
 
-% %% ================================================================
-% %  PONTO 8 – Seleção Gráfica das Características Temporais
+%% ================================================================
+%  PONTO 8 – Seleção Gráfica das Características Temporais
 % ================================================================
 fprintf('=== PONTO 8: Seleção de Features Temporais ===\n');
 
@@ -293,8 +289,8 @@ fprintf('  Features seleccionadas (top 3):\n');
 fprintf('  1. ZCR         – "six" tem ZCR muito alto (fricativa "s"); "one" e "nine" muito baixo.\n');
 fprintf('  2. Energia Total – "six" tem energia claramente mais baixa; "nine" e "zero" mais alta.\n');
 fprintf('  3. Duracao       – "one" e o mais curto; "nine", "zero" e "six" os mais longos.\n\n');
-% 
-% %% ================================================================
+
+%% ================================================================
 %  PONTO 9 – Série Complexa de Fourier (Espectro)
 % ================================================================
 fprintf('=== PONTO 9: Coeficientes da Série Complexa de Fourier ===\n');
@@ -307,44 +303,136 @@ for i = 1:N_files
 end
 T.FFT_Coeffs = fft_coeffs;
 fprintf('  Coeficientes guardados na tabela.\n\n');
-% 
-% %% ================================================================
-% %  PONTO 10 – Espectro de Amplitude Mediano e Quartis
-% % ================================================================
-% fprintf('=== PONTO 10: Espectro de Amplitude Mediano e Quartis ===\n');
-% 
-% N_fft     = target_len;
-% pos_freqs = 1:floor(N_fft/2);
-% fs_plot   = T.SampleRate(1);
-% freq_axis = (0:floor(N_fft/2)-1) * (fs_plot / N_fft);
-% 
-% figure('Name','Espectro de Amplitude', 'Position',[50 50 1400 800]);
-% sgtitle('Espectro de Amplitude Mediano por Dígito', 'FontSize',14, 'FontWeight','bold');
-% 
-% for d = 0:9
-%     idx_d = find(T.Digit == d);
-%     num_d = length(idx_d);
-% 
-%     amp_matrix = zeros(num_d, length(pos_freqs));
-%     for k = 1:num_d
-%         % Normalizar módulo pelo número de amostras
-%         amp_full = abs(T.FFT_Coeffs{idx_d(k)}) / N_fft;
-%         amp_matrix(k, :) = amp_full(pos_freqs);
-%     end
-% 
-%     med_spec = quantile(amp_matrix, 0.50, 1);
-%     q25_spec = quantile(amp_matrix, 0.25, 1);
-%     q75_spec = quantile(amp_matrix, 0.75, 1);
-% 
-%     subplot(5, 2, d+1);
-%     plot(freq_axis, med_spec, 'b', 'LineWidth',1); hold on;
-%     plot(freq_axis, q25_spec, 'r--', 'LineWidth',0.5);
-%     plot(freq_axis, q75_spec, 'g--', 'LineWidth',0.5);
-%     title(sprintf('Dígito %d', d));
-%     xlim([0, 8000]);   % visualização focada até 8 kHz
-%     if d == 0, legend('Median','Q25','Q75'); end
-%     grid on;
-% end
+
+%% ================================================================
+%  PONTO 10 – Espectro de Amplitude Mediano e Quartis
+% ================================================================
+fprintf('=== PONTO 10: Espectro de Amplitude Mediano e Quartis ===\n');
+
+N_fft     = target_len;
+% Ignorar o bin 0 Hz (componente DC = média do sinal).
+% Após normalização, todos os sinais têm média ~0, logo o DC é inútil para discriminação.
+% pos_freqs começa em 2 (bin 1 = 0 Hz é excluído).
+pos_freqs = 2:floor(N_fft/2);
+fs_plot   = T.SampleRate(1);
+freq_axis = (1:floor(N_fft/2)-1) * (fs_plot / N_fft);   % frequências em Hz, sem o 0 Hz
+
+figure('Name','Espectro de Amplitude', 'Position',[50 50 1400 800]);
+sgtitle('Espectro de Amplitude Mediano por Dígito', 'FontSize',14, 'FontWeight','bold');
+
+for d = 0:9
+    idx_d = find(T.Digit == d);
+    num_d = length(idx_d);
+
+    amp_matrix = zeros(num_d, length(pos_freqs));
+    for k = 1:num_d
+        % Os coeficientes já foram normalizados por N no ponto 9 (fft/N)
+        % por isso apenas tomamos o módulo directamente
+        amp_full = abs(T.FFT_Coeffs{idx_d(k)});
+        amp_matrix(k, :) = amp_full(pos_freqs);
+    end
+
+    med_spec = quantile(amp_matrix, 0.50, 1);
+    q25_spec = quantile(amp_matrix, 0.25, 1);
+    q75_spec = quantile(amp_matrix, 0.75, 1);
+
+    subplot(5, 2, d+1);
+    plot(freq_axis, med_spec, 'b', 'LineWidth',1); hold on;
+    plot(freq_axis, q25_spec, 'r--', 'LineWidth',0.5);
+    plot(freq_axis, q75_spec, 'g--', 'LineWidth',0.5);
+    title(sprintf('Dígito %d', d));
+    xlim([0, 8000]);   % visualização focada até 8 kHz
+    if d == 0, legend('Median','Q25','Q75'); end
+    grid on;
+end
+
+%% ================================================================
+%  PONTO 11 – Características Espectrais (5 features)
+%
+%  S1 – Centróide espectral
+%  S2 – Máximo espectral (amplitude)
+%  S3 – Máximo espectral (frequência)
+%  S4 – Média da amplitude espectral nas frequências positivas
+%  S5 – Spectral edge frequency (85%)
+% ================================================================
+fprintf('=== PONTO 11: Cálculo de Features Espectrais ===\n');
+
+feat_spec_centroid = zeros(N_files, 1);
+feat_spec_max_amp  = zeros(N_files, 1);
+feat_spec_max_freq = zeros(N_files, 1);
+feat_spec_mean     = zeros(N_files, 1);
+feat_spec_rolloff  = zeros(N_files, 1);
+
+for i = 1:N_files
+    amp = abs(T.FFT_Coeffs{i}(pos_freqs));
+
+    % Centróide espectral: frequência média ponderada pela amplitude
+    feat_spec_centroid(i) = sum(freq_axis' .* amp) / (sum(amp) + eps);
+
+    % Frequência e amplitude do pico espectral
+    [m_amp, m_idx]        = max(amp);
+    feat_spec_max_amp(i)  = m_amp;
+    feat_spec_max_freq(i) = freq_axis(m_idx);
+
+    feat_spec_mean(i) = mean(amp);
+
+    % Spectral edge frequency: frequência abaixo da qual está 85% da energia espectral
+    cum_energy   = cumsum(amp .^ 2);
+    total_energy = cum_energy(end);
+    idx_rolloff  = find(cum_energy >= 0.85 * total_energy, 1);
+    if isempty(idx_rolloff), idx_rolloff = length(freq_axis); end
+    feat_spec_rolloff(i) = freq_axis(idx_rolloff);
+end
+
+T.FeatSpecCentroid = feat_spec_centroid;
+T.FeatSpecMaxAmp   = feat_spec_max_amp;
+T.FeatSpecMaxFreq  = feat_spec_max_freq;
+T.FeatSpecMean     = feat_spec_mean;
+T.FeatSpecRolloff  = feat_spec_rolloff;
+fprintf('  Features espectrais calculadas e guardadas na tabela.\n\n');
+
+%% ================================================================
+%  PONTO 12 – Seleção Gráfica das Características Espectrais
+% ================================================================
+fprintf('=== PONTO 12: Seleção de Features Espectrais ===\n');
+
+figure('Name','Boxplots - Todas as Features Espectrais', ...
+       'NumberTitle','off', 'Position',[50 50 1400 800]);
+sgtitle('Boxplots das Features Espectrais por Dígito', 'FontSize',13, 'FontWeight','bold');
+
+subplot(2,3,1); boxplot(T.FeatSpecCentroid, T.Digit); title('Centróide Espectral');          xlabel('Dígito'); ylabel('Hz'); grid on;
+subplot(2,3,2); boxplot(T.FeatSpecMaxAmp,   T.Digit); title('Máximo Espectral (Amplitude)'); xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(2,3,3); boxplot(T.FeatSpecMaxFreq,  T.Digit); title('Máximo Espectral (Frequência)'); xlabel('Dígito'); ylabel('Hz'); grid on;
+subplot(2,3,4); boxplot(T.FeatSpecMean,     T.Digit); title('Média da Amplitude Espectral'); xlabel('Dígito'); ylabel('Valor'); grid on;
+subplot(2,3,5); boxplot(T.FeatSpecRolloff,  T.Digit); title('Spectral Edge Frequency (85%)'); xlabel('Dígito'); ylabel('Hz'); grid on;
+
+figure('Name','Boxplots - Top 3 Features Espectrais', ...
+       'NumberTitle','off', 'Position',[50 50 1200 500]);
+sgtitle('Top 3 Features Espectrais para Discriminação de Dígitos', 'FontSize',13, 'FontWeight','bold');
+
+subplot(1,3,1); boxplot(T.FeatSpecRolloff,  T.Digit); title('Spectral Edge Frequency (85%)'); xlabel('Dígito'); ylabel('Hz'); grid on;
+subplot(1,3,2); boxplot(T.FeatSpecCentroid, T.Digit); title('Centróide Espectral');            xlabel('Dígito'); ylabel('Hz'); grid on;
+subplot(1,3,3); boxplot(T.FeatSpecMaxAmp,   T.Digit); title('Máximo Espectral (Amplitude)');   xlabel('Dígito'); ylabel('Valor'); grid on;
+
+fprintf('  Features seleccionadas (top 3):\n');
+fprintf('  1. Spectral Edge Frequency – "six" completamente separado dos restantes.\n');
+fprintf('     A fricativa "s" empurra muita energia para as altas frequencias.\n');
+fprintf('  2. Centroide Espectral     – "one" claramente o mais baixo (~1500 Hz); "six" o mais alto (~5000 Hz).\n');
+fprintf('  3. Maximo Espectral (Amp)  – "six" tem amplitude de pico visivelmente mais baixa.\n\n');
+
+%% ================================================================
+%  PONTO 13 – Limpeza e Gravação dos Dados
+% ================================================================
+fprintf('=== PONTO 13: Limpeza e Gravação (Meta 1) ===\n');
+
+% Remove os sinais de áudio da tabela para poupar espaço no ficheiro .mat
+T.Signal             = [];
+T.SignalPreprocessed = [];
+T.FFT_Coeffs         = [];
+save('dados_meta1.mat', 'T', '-v7.3');
+fprintf('  Sinais removidos da tabela.\n');
+fprintf('  Tabela guardada em "dados_meta1.mat".\n');
+fprintf('  FIM DA META 1.\n\n');
 
 %% ================================================================
 %  FUNÇÕES LOCAIS – OBRIGATORIAMENTE NO FINAL DO FICHEIRO
@@ -378,10 +466,12 @@ end
 
 
 function sig_out = norm_amplitude(sig)
-% Normaliza o sinal para [-1, 1] dividindo pelo máximo absoluto.
-    mv = max(abs(sig));
-    if mv == 0, sig_out = sig; return; end
-    sig_out = sig / mv;
+% Normaliza o sinal para [-1, 1] com base na amplitude máxima e mínima.
+% min(sig) -> -1  e  max(sig) -> +1
+    mn = min(sig);
+    mx = max(sig);
+    if mx == mn, sig_out = zeros(size(sig)); return; end
+    sig_out = 2 * (sig - mn) / (mx - mn) - 1;
 end
 
 
