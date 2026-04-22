@@ -425,12 +425,9 @@ fprintf('  3. Maximo Espectral (Amp)  – "six" tem amplitude de pico visivelmen
 % ================================================================
 fprintf('=== PONTO 13: Limpeza e Gravação (Meta 1) ===\n');
 
-% Remove os sinais de áudio da tabela para poupar espaço no ficheiro .mat
-T.Signal             = [];
-T.SignalPreprocessed = [];
-T.FFT_Coeffs         = [];
+T.Signal = [];
 save('dados_meta1.mat', 'T', '-v7.3');
-fprintf('  Sinais removidos da tabela.\n');
+fprintf('  Sinais importados removidos da tabela.\n');
 fprintf('  Tabela guardada em "dados_meta1.mat".\n');
 fprintf('  FIM DA META 1.\n\n');
 
